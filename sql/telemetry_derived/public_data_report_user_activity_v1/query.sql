@@ -11,7 +11,7 @@ WITH sample AS (
   FROM
     `moz-fx-data-shared-prod.telemetry.clients_last_seen`
   WHERE
-    DATE(submission_timestamp) > DATE_SUB(@submission_date, INTERVAL 7 DAY)
+    submission_date > DATE_SUB(@submission_date, INTERVAL 7 DAY)
 ),
 countries AS (
   SELECT
