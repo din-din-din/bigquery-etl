@@ -20,16 +20,18 @@ countries AS (
   FROM
     `moz-fx-data-shared-prod.static.country_names_v1`
   WHERE
-    name IN ('Brazil',
-         'China',
-         'France',
-         'Germany',
-         'India',
-         'Indonesia',
-         'Italy',
-         'Poland',
-         'Russia',
-         'United States')
+    name IN (
+      'Brazil',
+      'China',
+      'France',
+      'Germany',
+      'India',
+      'Indonesia',
+      'Italy',
+      'Poland',
+      'Russia',
+      'United States'
+    )
 ),
 mau AS (
   SELECT
@@ -58,25 +60,32 @@ mau AS (
     submission_date = @submission_date
     AND days_since_seen < 28
   GROUP BY
-    submission_date, country_name
+    submission_date,
+    country_name
 ),
 daily_usage AS (
   SELECT
     'Worldwide' AS country_name,
-     avg(subsession_hours_sum) AS avg_hours_usage_daily,
-     DATE_ADD(submission_date, INTERVAL EXTRACT(dayofweek FROM submission_date)-1 DAY) AS submission_date
+    avg(subsession_hours_sum) AS avg_hours_usage_daily,
+    DATE_ADD(
+      submission_date,
+      INTERVAL EXTRACT(dayofweek FROM submission_date) - 1 DAY
+    ) AS submission_date
   FROM
     sample
   WHERE
     days_since_seen = 0
     AND subsession_hours_sum < 24 --remove outliers
   GROUP BY
-    DATE_ADD(submission_date, INTERVAL extract(dayofweek FROM submission_date)-1 DAY)
+    DATE_ADD(submission_date, INTERVAL EXTRACT(dayofweek FROM submission_date) - 1 DAY)
   UNION ALL
   SELECT
-    cn.name as country_name,
+    cn.name AS country_name,
     avg(subsession_hours_sum) AS avg_hours_usage_daily,
-    DATE_ADD(submission_date, INTERVAL extract(dayofweek FROM submission_date)-1 DAY) AS submission_date
+    DATE_ADD(
+      submission_date,
+      INTERVAL EXTRACT(dayofweek FROM submission_date) - 1 DAY
+    ) AS submission_date
   FROM
     sample
   LEFT JOIN
@@ -86,15 +95,18 @@ daily_usage AS (
   WHERE
     days_since_seen = 0
     AND subsession_hours_sum < 24 --remove outliers
-    GROUP BY
-      name,
-      DATE_ADD(submission_date, INTERVAL extract(dayofweek FROM submission_date)-1 DAY)
+  GROUP BY
+    name,
+    DATE_ADD(submission_date, INTERVAL EXTRACT(dayofweek FROM submission_date) - 1 DAY)
 ),
 intensity AS (
   SELECT
     submission_date,
     'Worldwide' AS country_name,
-    SAFE_DIVIDE(SUM(`moz-fx-data-shared-prod.udf.bitcount_lowest_7`(days_seen_bits)), count(*)) AS intensity
+    SAFE_DIVIDE(
+      SUM(`moz-fx-data-shared-prod.udf.bitcount_lowest_7`(days_seen_bits)),
+      count(*)
+    ) AS intensity
   FROM
     sample
   WHERE
@@ -106,7 +118,10 @@ intensity AS (
   SELECT
     submission_date,
     cn.name AS country_name,
-    SAFE_DIVIDE(SUM(`moz-fx-data-shared-prod.udf.bitcount_lowest_7`(days_seen_bits)), count(*)) AS intensity
+    SAFE_DIVIDE(
+      SUM(`moz-fx-data-shared-prod.udf.bitcount_lowest_7`(days_seen_bits)),
+      count(*)
+    ) AS intensity
   FROM
     sample
   LEFT JOIN
@@ -123,9 +138,13 @@ intensity AS (
 new_profile_rate AS (
   SELECT
     'Worldwide' AS country_name,
-    100 * countif(`moz-fx-data-shared-prod.udf.pos_of_trailing_set_bit`(days_created_profile_bits)<7) / -- new profiles
-      countif(`moz-fx-data-shared-prod.udf.pos_of_trailing_set_bit`(days_seen_bits)<7) AS new_profile_rate, -- active profiles
-     submission_date
+    100 * countif(
+      `moz-fx-data-shared-prod.udf.pos_of_trailing_set_bit`(days_created_profile_bits) < 7
+    ) / -- new profiles
+    countif(
+      `moz-fx-data-shared-prod.udf.pos_of_trailing_set_bit`(days_seen_bits) < 7
+    ) AS new_profile_rate, -- active profiles
+    submission_date
   FROM
     sample
   WHERE
@@ -135,9 +154,13 @@ new_profile_rate AS (
   UNION ALL
   SELECT
     cn.name AS country_name,
-    100 * countif(`moz-fx-data-shared-prod.udf.pos_of_trailing_set_bit`(days_created_profile_bits)<7) / -- new profiles
-      countif(`moz-fx-data-shared-prod.udf.pos_of_trailing_set_bit`(days_seen_bits)<7) AS new_profile_rate, -- active profiles
-     submission_date
+    100 * countif(
+      `moz-fx-data-shared-prod.udf.pos_of_trailing_set_bit`(days_created_profile_bits) < 7
+    ) / -- new profiles
+    countif(
+      `moz-fx-data-shared-prod.udf.pos_of_trailing_set_bit`(days_seen_bits) < 7
+    ) AS new_profile_rate, -- active profiles
+    submission_date
   FROM
     sample
   LEFT JOIN
@@ -150,12 +173,12 @@ new_profile_rate AS (
     submission_date,
     country_name
 ),
-active_clients_weekly as (
+active_clients_weekly AS (
   SELECT
     country,
     client_id,
-    split(app_version, '.')[offset(0)] as major_version,
-    date_sub(submission_date, interval days_since_seen DAY) as last_day_seen,
+    split(app_version, '.')[offset(0)] AS major_version,
+    date_sub(submission_date, INTERVAL days_since_seen DAY) AS last_day_seen,
     submission_date
   FROM
     sample
@@ -170,7 +193,7 @@ latest_releases AS (
   FROM
     `moz-fx-data-shared-prod.telemetry.buildhub2`
   WHERE
-    build.target.channel ='release'
+    build.target.channel = 'release'
     AND DATE(build.build.date) >= DATE_SUB(@submission_date, INTERVAL 60 DAY)
   GROUP BY
     day
@@ -180,7 +203,7 @@ active_clients_with_latest_releases AS (
     client_id,
     country,
     major_version,
-    max(latest_major_version) as latest_major_version,
+    max(latest_major_version) AS latest_major_version,
     submission_date
   FROM
     active_clients_weekly
@@ -199,7 +222,7 @@ active_clients_with_latest_releases AS (
 latest_version_ratio AS (
   SELECT
     'Worldwide' AS country_name,
-    countif(major_version=latest_major_version) / count(*) as latest_version_ratio,
+    countif(major_version = latest_major_version) / count(*) AS latest_version_ratio,
     submission_date
   FROM
     active_clients_with_latest_releases
@@ -208,7 +231,7 @@ latest_version_ratio AS (
   UNION ALL
   SELECT
     cn.name AS country_name,
-    countif(major_version=latest_major_version) / count(*) as latest_version_ratio,
+    countif(major_version = latest_major_version) / count(*) AS latest_version_ratio,
     submission_date
   FROM
     active_clients_with_latest_releases
@@ -233,18 +256,22 @@ FROM
 JOIN
   daily_usage
 ON
-  mau.submission_date=daily_usage.submission_date AND mau.country_name=daily_usage.country_name
+  mau.submission_date = daily_usage.submission_date
+  AND mau.country_name = daily_usage.country_name
 JOIN
   intensity
 ON
-  mau.submission_date=intensity.submission_date AND mau.country_name=intensity.country_name
+  mau.submission_date = intensity.submission_date
+  AND mau.country_name = intensity.country_name
 JOIN
   new_profile_rate
 ON
-  mau.submission_date=new_profile_rate.submission_date AND mau.country_name=new_profile_rate.country_name
+  mau.submission_date = new_profile_rate.submission_date
+  AND mau.country_name = new_profile_rate.country_name
 JOIN
   latest_version_ratio
 ON
-  mau.submission_date=latest_version_ratio.submission_date AND mau.country_name=latest_version_ratio.country_name
+  mau.submission_date = latest_version_ratio.submission_date
+  AND mau.country_name = latest_version_ratio.country_name
 ORDER BY
   country_name
